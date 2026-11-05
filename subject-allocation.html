@@ -138,7 +138,6 @@ function render(){
   $('#menu').innerHTML = MENU[user.role].map(([k,t])=>`<a data-p="${k}" class="${k===page?'on':''}">${t}</a>`).join('');
   $('#menu').querySelectorAll('a').forEach(a=>a.onclick=()=>go(a.dataset.p));
   $('#view').innerHTML = (views[page]||views.dashboard)();
-  const m = $('#view').querySelector('[data-init]'); 
   bind();
 }
 const msg = () => notice ? `<div class="msg" role="status">${notice}</div>` : '';
