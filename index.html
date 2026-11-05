@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subject Allocation for College Faculty</title>
+<style>
+:root{--board:#1f3a33;--board2:#2b4d44;--chalk:#f5f2e8;--paper:#fbfaf6;--ink:#1d2623;--mute:#66736e;--line:#dcd8c9;--amber:#d9a21b;--red:#b3402f;--green:#2f7a4f}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--paper);color:var(--ink)}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;margin:0 0 .5rem;font-weight:700}
+button,select,input{font:inherit}
+button{cursor:pointer;border:1px solid var(--board);background:var(--board);color:var(--chalk);padding:.45rem .9rem;border-radius:4px}
+button.ghost{background:none;color:var(--board)}button.danger{background:var(--red);border-color:var(--red)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+input,select{padding:.4rem .5rem;border:1px solid var(--line);border-radius:4px;background:#fff;width:100%}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:.8rem}
+#login{min-height:100vh;display:grid;place-items:center;background:var(--board);padding:1rem}
+#login form{background:var(--chalk);padding:2rem;border-radius:6px;width:min(380px,100%)}
+#login h1{font-size:1.6rem}
+.hint{font-size:12px;color:var(--mute)}
+#app{display:none;min-height:100vh;grid-template-columns:220px 1fr}
+nav{background:var(--board);color:var(--chalk);padding:1.2rem 0;position:sticky;top:0;height:100vh}
+nav h2{padding:0 1.2rem;font-size:1.1rem}
+nav a{display:block;padding:.6rem 1.2rem;color:var(--chalk);text-decoration:none;cursor:pointer;border-left:4px solid transparent}
+nav a.on{background:var(--board2);border-left-color:var(--amber)}
+nav .who{padding:1rem 1.2rem;font-size:13px;opacity:.8}
+main{padding:1.5rem 2rem;max-width:1100px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+table{border-collapse:collapse;width:100%;background:#fff;border:1px solid var(--line)}
+th,td{padding:.5rem .7rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{background:var(--chalk);font-size:13px}
+.wrap{overflow-x:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat{background:#fff;border:1px solid var(--line);border-left:5px solid var(--amber);padding:.8rem 1rem}
+.stat b{font:700 1.8rem Georgia,serif;display:block}
+.bar{background:var(--line);height:10px;border-radius:5px;min-width:120px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--green)}.bar i.over{background:var(--red)}.bar i.low{background:var(--amber)}
+.tag{display:inline-block;padding:0 .5rem;border-radius:10px;font-size:12px;background:var(--chalk);border:1px solid var(--line)}
+.tag.ok{color:var(--green)}.tag.bad{color:var(--red)}.tag.warn{color:#8a6500}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;background:#fff;border:1px solid var(--line);padding:1rem;margin-bottom:1rem}
+.grid label{margin:0}
+.msg{padding:.6rem .9rem;background:var(--chalk);border-left:4px solid var(--amber);margin-bottom:1rem}
+.banner{padding:.6rem .9rem;margin-bottom:1rem;border-left:4px solid var(--green);background:#e8f2ec}
+@media(max-width:780px){#app{grid-template-columns:1fr}nav{position:static;height:auto}main{padding:1rem}}
+@media print{nav,.noprint{display:none!important}#app{display:block}}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <form id="loginForm">
+    <h1>Subject Allocation</h1>
+    <p class="hint">Sign in to manage or view this semester's faculty assignments.</p>
+    <label>Role
+      <select id="role"><option value="admin">Administrator</option><option value="hod">Head of Department</option><option value="faculty">Faculty member</option></select>
+    </label>
+    <label id="facPick" hidden>Faculty member <select id="facSel"></select></label>
+    <label>Password <input id="pw" type="password" required autocomplete="off"></label>
+    <p id="err" class="hint" style="color:var(--red)" role="alert"></p>
+    <button style="width:100%">Log in</button>
+    <p class="hint">Demo passwords: admin123 · hod123 · faculty123</p>
+  </form>
+</section>
+
+<div id="app">
+  <nav>
+    <h2>Subject Allocation</h2>
+    <div class="who" id="who"></div>
+    <div id="menu"></div>
+    <a id="logout">Log out</a>
+  </nav>
+  <main id="view"></main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KEY = 'subjectAllocationV1';
+const PW = {admin:'admin123', hod:'hod123', faculty:'faculty123'};
+
+const seed = () => ({
+  faculty:[
+    {id:'F101',name:'Dr. Meera Kulkarni',dept:'Computer Engg',spec:['Programming','Databases'],max:16,avail:true,active:true},
+    {id:'F102',name:'Prof. Rahul Deshmukh',dept:'Computer Engg',spec:['Networks','Security'],max:14,avail:true,active:true},
+    {id:'F103',name:'Prof. Sneha Patil',dept:'Computer Engg',spec:['Software Engineering','Web'],max:16,avail:true,active:true},
+    {id:'F104',name:'Dr. Anil Joshi',dept:'Computer Engg',spec:['Mathematics','AI'],max:12,avail:true,active:true},
+    {id:'F105',name:'Prof. Kavita More',dept:'Computer Engg',spec:['Programming','Web'],max:16,avail:false,active:true}],
+  subjects:[
+    {code:'CS301',title:'Database Management Systems',sem:3,credits:4,hours:4,area:'Databases'},
+    {code:'CS302',title:'Data Structures in C',sem:3,credits:4,hours:5,area:'Programming'},
+    {code:'CS401',title:'Computer Networks',sem:4,credits:3,hours:4,area:'Networks'},
+    {code:'CS402',title:'Software Development Practices',sem:4,credits:3,hours:4,area:'Software Engineering'},
+    {code:'CS501',title:'Web Technologies',sem:5,credits:3,hours:4,area:'Web'},
+    {code:'CS502',title:'Artificial Intelligence',sem:5,credits:4,hours:5,area:'AI'},
+    {code:'CS601',title:'Information Security',sem:6,credits:3,hours:4,area:'Security'},
+    {code:'MA201',title:'Discrete Mathematics',sem:2,credits:4,hours:4,area:'Mathematics'}],
+  alloc:{}, published:false
+});
+let db = JSON.parse(localStorage.getItem(KEY) || 'null') || seed();
+const save = () => localStorage.setItem(KEY, JSON.stringify(db));
+let user = null, page = 'dashboard', notice = '';
+
+/* ---------- allocation logic ---------- */
+const load = (fid, skip) => db.subjects.filter(s => db.alloc[s.code] === fid && s.code !== skip).reduce((t,s)=>t+s.hours,0);
+const fac = id => db.faculty.find(f => f.id === id);
+function problems(sub, f){
+  const p = [];
+  if(!f.active) p.push('inactive');
+  if(!f.avail) p.push('unavailable');
+  if(load(f.id, sub.code) + sub.hours > f.max) p.push('exceeds workload limit');
+  return p;
+}
+function recommend(sub){
+  return db.faculty
+    .filter(f => !problems(sub,f).length)
+    .map(f => ({f, match:f.spec.includes(sub.area)?1:0, h:load(f.id, sub.code)}))
+    .filter(r => r.match)
+    .sort((a,b)=> b.match-a.match || a.h-b.h);
+}
+function status(f){
+  const h = load(f.id), r = h / f.max;
+  if(r > 1) return ['over','Over-allocated'];
+  if(r < .5) return ['low','Under-allocated'];
+  return ['ok','Balanced'];
+}
+
+/* ---------- rendering ---------- */
+const MENU = {
+  admin:[['dashboard','Dashboard'],['faculty','Faculty'],['subjects','Subjects'],['allocate','Allocation'],['reports','Reports']],
+  hod:[['dashboard','Dashboard'],['allocate','Allocation'],['workload','Workload'],['reports','Reports']],
+  faculty:[['mine','My subjects']]
+};
+function go(p){ page = p; notice=''; render(); }
+function render(){
+  $('#login').style.display='none'; $('#app').style.display='grid';
+  $('#who').textContent = user.label;
+  $('#menu').innerHTML = MENU[user.role].map(([k,t])=>`<a data-p="${k}" class="${k===page?'on':''}">${t}</a>`).join('');
+  $('#menu').querySelectorAll('a').forEach(a=>a.onclick=()=>go(a.dataset.p));
+  $('#view').innerHTML = (views[page]||views.dashboard)();
+  bind();
+}
+const msg = () => notice ? `<div class="msg" role="status">${notice}</div>` : '';
+const bar = f => { const h=load(f.id), [c]=status(f); return `<div class="bar" title="${h}/${f.max} hrs"><i class="${c==='ok'?'':c}" style="width:${Math.min(100,h/f.max*100)}%"></i></div>`; };
+const pubBanner = () => db.published ? '<div class="banner">The final allocation is published. Faculty can see their subjects.</div>' : '';
+
+const views = {
+  dashboard(){
+    const done = db.subjects.filter(s=>db.alloc[s.code]).length;
+    const act = db.faculty.filter(f=>f.active);
+    const flagged = act.filter(f=>status(f)[0]!=='ok').length;
+    return `<h1>Dashboard</h1>${pubBanner()}
+    <div class="stats">
+      <div class="stat"><b>${act.length}</b>Active faculty</div>
+      <div class="stat"><b>${db.subjects.length}</b>Subjects</div>
+      <div class="stat"><b>${done}/${db.subjects.length}</b>Subjects allocated</div>
+      <div class="stat"><b>${flagged}</b>Workload flags</div></div>
+    <h3>Faculty workload</h3>${workloadTable()}`;
+  },
+  faculty(){
+    return `<div class="top"><h1>Faculty</h1></div>${msg()}
+    <form id="facForm" class="grid">
+      <label>ID<input name="id" required></label>
+      <label>Name<input name="name" required></label>
+      <label>Department<input name="dept" value="Computer Engg" required></label>
+      <label>Specializations (comma-separated)<input name="spec" required></label>
+      <label>Max hours / week<input name="max" type="number" min="1" value="16" required></label>
+      <label>&nbsp;<button>Add faculty</button></label>
+    </form>
+    <div class="wrap"><table><tr><th>ID</th><th>Name</th><th>Specialization</th><th>Max hrs</th><th>Availability</th><th>Status</th><th></th></tr>
+    ${db.faculty.map(f=>`<tr><td>${esc(f.id)}</td><td>${esc(f.name)}</td><td>${f.spec.map(esc).join(', ')}</td><td>${f.max}</td>
+      <td><button class="ghost" data-avail="${esc(f.id)}">${f.avail?'Available':'Unavailable'}</button></td>
+      <td><span class="tag ${f.active?'ok':'bad'}">${f.active?'Active':'Inactive'}</span></td>
+      <td><button class="ghost" data-act="${esc(f.id)}">${f.active?'Deactivate':'Activate'}</button></td></tr>`).join('')}
+    </table></div>`;
+  },
+  subjects(){
+    return `<div class="top"><h1>Subjects</h1></div>${msg()}
+    <form id="subForm" class="grid">
+      <label>Code<input name="code" required></label>
+      <label>Title<input name="title" required></label>
+      <label>Semester<input name="sem" type="number" min="1" max="8" required></label>
+      <label>Credits<input name="credits" type="number" min="1" required></label>
+      <label>Weekly hours<input name="hours" type="number" min="1" required></label>
+      <label>Required specialization<input name="area" required></label>
+      <label>&nbsp;<button>Add subject</button></label>
+    </form>
+    <div class="wrap"><table><tr><th>Code</th><th>Title</th><th>Sem</th><th>Credits</th><th>Hrs/wk</th><th>Specialization</th><th></th></tr>
+    ${db.subjects.map(s=>`<tr><td>${esc(s.code)}</td><td>${esc(s.title)}</td><td>${s.sem}</td><td>${s.credits}</td><td>${s.hours}</td><td>${esc(s.area)}</td>
+      <td><button class="ghost danger" style="color:var(--red);border-color:var(--red)" data-del="${esc(s.code)}">Remove</button></td></tr>`).join('')}
+    </table></div>`;
+  },
+  allocate(){
+    const rows = db.subjects.map(s=>{
+      const cur = db.alloc[s.code]||'', rec = recommend(s), top = rec[0];
+      const opts = db.faculty.filter(f=>f.active).map(f=>{
+        const p = problems(s,f);
+        return `<option value="${esc(f.id)}" ${cur===f.id?'selected':''}>${esc(f.name)} (${load(f.id,s.code)}/${f.max} h)${f.spec.includes(s.area)?' ★':''}${p.length?' – '+p[0]:''}</option>`;
+      }).join('');
+      return `<tr><td>${esc(s.code)}</td><td>${esc(s.title)}<br><span class="hint">Needs ${esc(s.area)} · ${s.hours} h/wk</span></td>
+        <td><select data-sub="${esc(s.code)}" aria-label="Faculty for ${esc(s.code)}"><option value="">— Unassigned —</option>${opts}</select></td>
+        <td>${top?`<span class="tag ok">${esc(top.f.name)}</span>`:'<span class="tag warn">No suitable faculty</span>'}</td></tr>`;
+    }).join('');
+    return `<div class="top"><h1>Allocation</h1><div class="noprint">
+      <button class="ghost" id="auto">Fill gaps with recommendations</button>
+      <button class="ghost" id="clear">Clear all</button>
+      <button id="publish">${db.published?'Unpublish':'Approve &amp; publish'}</button></div></div>
+    ${pubBanner()}${msg()}
+    <p class="hint">★ = specialization match. Each subject has one faculty member, so duplicate assignments cannot occur. Recommendations skip unavailable faculty and anyone who would exceed their limit.</p>
+    <div class="wrap"><table><tr><th>Code</th><th>Subject</th><th>Assigned to</th><th>Recommended</th></tr>${rows}</table></div>
+    <h3 style="margin-top:1.5rem">Workload after changes</h3>${workloadTable()}`;
+  },
+  workload(){ return `<h1>Workload</h1>${workloadTable()}`; },
+  reports(){
+    const fw = db.faculty.filter(f=>f.active).map(f=>{
+      const subs = db.subjects.filter(s=>db.alloc[s.code]===f.id);
+      return `<tr><td>${esc(f.name)}</td><td>${subs.map(s=>esc(s.code+' '+s.title)).join('<br>')||'—'}</td><td>${load(f.id)}/${f.max}</td></tr>`;}).join('');
+    const sw = db.subjects.map(s=>`<tr><td>${esc(s.code)}</td><td>${esc(s.title)}</td><td>${s.sem}</td><td>${db.alloc[s.code]?esc(fac(db.alloc[s.code]).name):'<span class="tag bad">Unassigned</span>'}</td></tr>`).join('');
+    return `<div class="top"><h1>Reports</h1><div class="noprint"><button class="ghost" id="csv">Download CSV</button> <button id="print">Print</button></div></div>${pubBanner()}
+    <h3>Faculty-wise allocation</h3><div class="wrap"><table><tr><th>Faculty</th><th>Subjects</th><th>Hours / limit</th></tr>${fw}</table></div>
+    <h3 style="margin-top:1.5rem">Subject-wise faculty list</h3><div class="wrap"><table><tr><th>Code</th><th>Subject</th><th>Sem</th><th>Faculty</th></tr>${sw}</table></div>`;
+  },
+  mine(){
+    const f = fac(user.fid);
+    if(!db.published) return `<h1>My subjects</h1><div class="msg">The HOD has not published the allocation yet. Check back after it is approved.</div>`;
+    const subs = db.subjects.filter(s=>db.alloc[s.code]===f.id);
+    return `<h1>My subjects</h1><p>${esc(f.name)} · ${load(f.id)} of ${f.max} weekly hours</p>${bar(f)}<br>
+    <div class="wrap"><table><tr><th>Code</th><th>Subject</th><th>Sem</th><th>Credits</th><th>Hrs/wk</th></tr>
+    ${subs.map(s=>`<tr><td>${esc(s.code)}</td><td>${esc(s.title)}</td><td>${s.sem}</td><td>${s.credits}</td><td>${s.hours}</td></tr>`).join('')||'<tr><td colspan="5">No subjects assigned to you.</td></tr>'}</table></div>`;
+  }
+};
+function workloadTable(){
+  return `<div class="wrap"><table><tr><th>Faculty</th><th>Assigned</th><th>Limit</th><th>Load</th><th>Review</th></tr>
+  ${db.faculty.filter(f=>f.active).map(f=>{const [c,t]=status(f);return `<tr><td>${esc(f.name)}</td><td>${load(f.id)} h</td><td>${f.max} h</td><td>${bar(f)}</td><td><span class="tag ${c==='ok'?'ok':c==='over'?'bad':'warn'}">${t}</span></td></tr>`}).join('')}</table></div>`;
+}
+
+/* ---------- actions ---------- */
+function bind(){
+  const v = $('#view'), on = (s,fn)=>v.querySelectorAll(s).forEach(fn);
+  on('[data-avail]', b=>b.onclick=()=>{const f=fac(b.dataset.avail);f.avail=!f.avail;save();render();});
+  on('[data-act]', b=>b.onclick=()=>{const f=fac(b.dataset.act);f.active=!f.active;
+    if(!f.active) db.subjects.forEach(s=>{if(db.alloc[s.code]===f.id)delete db.alloc[s.code];}); save();render();});
+  on('[data-del]', b=>b.onclick=()=>{if(confirm('Remove '+b.dataset.del+'?')){delete db.alloc[b.dataset.del];db.subjects=db.subjects.filter(s=>s.code!==b.dataset.del);save();render();}});
+  const ff = $('#facForm'); if(ff) ff.onsubmit = e=>{e.preventDefault();const d=Object.fromEntries(new FormData(ff));
+    if(fac(d.id)){notice='Faculty ID '+esc(d.id)+' already exists. Use a different ID.';return render();}
+    db.faculty.push({id:d.id.trim(),name:d.name.trim(),dept:d.dept.trim(),spec:d.spec.split(',').map(x=>x.trim()).filter(Boolean),max:+d.max,avail:true,active:true});
+    save();notice='Faculty added.';render();};
+  const sf = $('#subForm'); if(sf) sf.onsubmit = e=>{e.preventDefault();const d=Object.fromEntries(new FormData(sf));
+    if(db.subjects.some(s=>s.code===d.code.trim())){notice='Subject code '+esc(d.code)+' already exists.';return render();}
+    db.subjects.push({code:d.code.trim(),title:d.title.trim(),sem:+d.sem,credits:+d.credits,hours:+d.hours,area:d.area.trim()});
+    save();notice='Subject added.';render();};
+  on('[data-sub]', sel=>sel.onchange=()=>{
+    const s = db.subjects.find(x=>x.code===sel.dataset.sub), id = sel.value;
+    if(!id){delete db.alloc[s.code];}
+    else{
+      const f = fac(id), p = problems(s,f);
+      if(p.length && !confirm(f.name+' is '+p.join(' and ')+' for '+s.code+'. Approve this as a department exception?')){return render();}
+      db.alloc[s.code]=id;
+    }
+    db.published=false; save(); render();
+  });
+  const A = id => $(id);
+  if(A('#auto')) A('#auto').onclick=()=>{let n=0;db.subjects.forEach(s=>{if(!db.alloc[s.code]){const r=recommend(s)[0];if(r){db.alloc[s.code]=r.f.id;n++;}}});
+    db.published=false;save();notice=n+' subject(s) assigned from recommendations. Review before publishing.';render();};
+  if(A('#clear')) A('#clear').onclick=()=>{if(confirm('Remove all allocations?')){db.alloc={};db.published=false;save();render();}};
+  if(A('#publish')) A('#publish').onclick=()=>{
+    if(db.published){db.published=false;save();return render();}
+    const missing = db.subjects.filter(s=>!db.alloc[s.code]).length;
+    const over = db.faculty.filter(f=>status(f)[0]==='over').length;
+    if((missing||over) && !confirm(`${missing} subject(s) unassigned and ${over} over-allocated faculty. Publish anyway?`)) return;
+    db.published=true;save();notice='Allocation published.';render();};
+  if(A('#print')) A('#print').onclick=()=>print();
+  if(A('#csv')) A('#csv').onclick=()=>{
+    const q=x=>'"'+String(x).replace(/"/g,'""')+'"';
+    const rows=[['Code','Subject','Semester','Credits','Hours','Faculty']].concat(db.subjects.map(s=>[s.code,s.title,s.sem,s.credits,s.hours,db.alloc[s.code]?fac(db.alloc[s.code]).name:'Unassigned']));
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'}));a.download='allocation.csv';a.click();};
+}
+
+/* ---------- login ---------- */
+$('#facSel').innerHTML = db.faculty.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+$('#role').onchange = e => $('#facPick').hidden = e.target.value!=='faculty';
+$('#loginForm').onsubmit = e => {
+  e.preventDefault();
+  const role = $('#role').value;
+  if($('#pw').value !== PW[role]){ $('#err').textContent='Incorrect password for this role.'; return; }
+  const fid = $('#facSel').value;
+  user = {role, fid, label: role==='faculty' ? fac(fid).name : role==='hod' ? 'Head of Department' : 'Administrator'};
+  page = MENU[role][0][0]; $('#err').textContent=''; $('#pw').value=''; render();
+};
+$('#logout').onclick = () => { user=null; $('#app').style.display='none'; $('#login').style.display='grid'; };
+</script>
+</body>
+</html>
